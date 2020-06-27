@@ -18,19 +18,21 @@ import (
 * and print out the top 10 words.
  */
 
-func main() {
-	// matches, err := glob("./test")
-	// if err != nil {
-	// 	panic(err)
-	// }
-	// fmt.Printf("%+v\n", matches)
+var wg sync.WaitGroup
+var mutex sync.Mutex
+var wordList map[string]int
+var top10 map[string]int
+var min int
 
+func main() {
+	wordList = map[string]int{}
+	top10 = map[string]int{}
 	wg.Add(1)
 	walkDir("./test")
 	wg.Wait()
-}
 
-var wg sync.WaitGroup
+	fmt.Println(wordList)
+}
 
 func walkDir(dir string) error {
 	defer wg.Done()
@@ -64,6 +66,15 @@ func readFile(filepath string) {
 	numWords := 0
 	for scanner.Scan() {
 		numWords++
+		word := strings.ToLower(scanner.Text())
+		mutex.Lock()
+		wc := wordList[word] + 1
+		wordList[word] = wc
+		if wc > min {
+			addToTop10(word)
+		}
+		mutex.Unlock()
+		// TODO: if case
 		// words = append(words, scanner.Text())
 	}
 
@@ -71,4 +82,12 @@ func readFile(filepath string) {
 	// for _, word := range words {
 	// 	fmt.Println(word)
 	// }
+}
+
+func addToTop10(word string) {
+
+	for k, v := range top10 {
+
+	}
+
 }
