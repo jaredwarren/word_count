@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"container/heap"
 	"fmt"
 	"log"
 	"os"
@@ -24,7 +25,61 @@ var wordList map[string]int
 var top10 map[string]int
 var min int
 
+// Word ...
+type Word struct {
+	String string
+	Count  int
+}
+
+// A WordQueue implements heap.Interface and holds Items.
+type WordQueue []*Word
+
+// Len ...
+func (pq WordQueue) Len() int { return len(pq) }
+
+// Less ...
+func (pq WordQueue) Less(i, j int) bool {
+	// We want Pop to give us the highest, not lowest, priority so we use greater than here.
+	return pq[i].Count > pq[j].Count
+}
+
+// Swap ...
+func (pq WordQueue) Swap(i, j int) {
+	pq[i], pq[j] = pq[j], pq[i]
+	// pq[i].index = i
+	// pq[j].index = j
+}
+
+// Push ...
+func (pq *WordQueue) Push(x interface{}) {
+	// n := len(*pq)
+	item := x.(*Word)
+	// item.index = n
+	item.Count++
+	*pq = append(*pq, item)
+}
+
+// Pop ...
+func (pq *WordQueue) Pop() interface{} {
+	old := *pq
+	n := len(old)
+	item := old[n-1]
+	old[n-1] = nil // avoid memory leak
+	// item.index = -1 // for safety
+	*pq = old[0 : n-1]
+	return item
+}
+
+/**
+* main
+ */
+
+var wq WordQueue
+
 func main() {
+	wq = WordQueue{}
+	heap.Init(&wq)
+
 	wordList = map[string]int{}
 	top10 = map[string]int{}
 	wg.Add(1)
@@ -68,11 +123,15 @@ func readFile(filepath string) {
 		numWords++
 		word := strings.ToLower(scanner.Text())
 		mutex.Lock()
-		wc := wordList[word] + 1
-		wordList[word] = wc
-		if wc > min {
-			addToTop10(word)
-		}
+		// wc := wordList[word] + 1
+		// wordList[word] = wc
+
+		heap.Push(&wq, word)
+
+		// heap.Push(&pq, item)
+		// if wc > min {
+		// 	addToTop10(word)
+		// }
 		mutex.Unlock()
 		// TODO: if case
 		// words = append(words, scanner.Text())
