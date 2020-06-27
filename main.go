@@ -20,82 +20,49 @@ import (
 * and print out the top 10 words.
  */
 
-var wg sync.WaitGroup
-var mutex sync.Mutex
-var wordList map[string]int
-var top10 map[string]int
-var min int
+var (
+	wg    sync.WaitGroup
+	mutex sync.Mutex
+	wq    WordQueue
+)
 
-// Word ...
-type Word struct {
-	String string
-	Count  int
-}
-
-// A WordQueue implements heap.Interface and holds Items.
-type WordQueue []*Word
-
-// Len ...
-func (pq WordQueue) Len() int { return len(pq) }
-
-// Less ...
-func (pq WordQueue) Less(i, j int) bool {
-	// We want Pop to give us the highest, not lowest, priority so we use greater than here.
-	return pq[i].Count > pq[j].Count
-	// si := pq[i]
-	// return wordList[*pq[i]] > wordList[*pq[j]]
-}
-
-// Swap ...
-func (pq WordQueue) Swap(i, j int) {
-	pq[i], pq[j] = pq[j], pq[i]
-	// pq[i].index = i
-	// pq[j].index = j
-}
-
-// Push ...
-func (pq *WordQueue) Push(x interface{}) {
-	// item := x.(*string)
-	item := x.(*Word)
-	*pq = append(*pq, item)
-}
-
-// Pop ...
-func (pq *WordQueue) Pop() interface{} {
-	old := *pq
-	n := len(old)
-	item := old[n-1]
-	old[n-1] = nil // avoid memory leak
-	// item.index = -1 // for safety
-	*pq = old[0 : n-1]
-	return item
-}
-
-/**
-* main
- */
-
-var wq WordQueue
+// TOP number of most words to print
+const TOP = 10
 
 func main() {
+	args := os.Args
+
+	// Get path from args (default to current working dir)
+	searchPath := "./"
+	if len(args) > 1 {
+		searchPath = args[1]
+	}
+
+	// validate input path
+	pi, err := os.Stat(searchPath)
+	if err != nil {
+		log.Fatal(err)
+		os.Exit(1)
+	}
+	if !pi.IsDir() {
+		log.Fatalf("Input path must be directory")
+		os.Exit(1)
+	}
+
+	// Init word queue
 	wq = WordQueue{}
 	heap.Init(&wq)
 
-	wordList = map[string]int{}
-	top10 = map[string]int{}
+	// Start walking directory
 	wg.Add(1)
-	walkDir("./test")
+	walkDir(searchPath)
 	wg.Wait()
 
-	for i := 0; i < 10; i++ {
-		// word := heap.Pop(&wq).(*string)
-		// fmt.Println(*word, wordList[*word])
-
+	// Print out top words
+	for i := 0; i < TOP; i++ {
 		word := heap.Pop(&wq).(*Word)
-		fmt.Println(word.String, word.Count)
+		fmt.Println(word.value, word.count)
 	}
-
-	fmt.Println(wordList)
 }
 
 func walkDir(dir string) error {
@@ -109,62 +76,117 @@ func walkDir(dir string) error {
 			// Tell walk to not scan sub-directories, since we're walking concurrently
 			return filepath.SkipDir
 		}
+
+		// Scan all regular files ending in ".txt"
 		if !info.IsDir() && info.Mode().IsRegular() && strings.HasSuffix(path, ".txt") {
-			fmt.Println(path)
-			readFile(path)
+			go func() {
+				wg.Add(1)
+				readFile(path)
+				wg.Done()
+			}()
 		}
 		return nil
 	})
 }
 
-func readFile(filepath string) {
+// readFile scans a file and adds words to the word queue
+func readFile(filepath string) error {
 	file, err := os.Open(filepath)
 	if err != nil {
 		log.Fatal(err)
+		return err
 	}
 
 	scanner := bufio.NewScanner(file)
 	scanner.Split(ScanWords)
-	// scanner.Split(bufio.ScanWords)
-	// scanner.Split(func(data []byte, atEOF bool) (advance int, token []byte, err error) {
-	// 	if atEOF && len(data) == 0 {
-	// 		return 0, nil, nil
-	// 	}
-	// 	if i := strings.Index(string(data), "\n#"); i >= 0 {
-	// 		return i + 1, data[0:i], nil
-	// 	}
 
-	// 	if atEOF {
-	// 		return len(data), data, nil
-	// 	}
-
-	// 	return
-	// })
-
-	// var words []string
 	numWords := 0
 	for scanner.Scan() {
 		numWords++
 		word := strings.ToLower(scanner.Text())
+
+		// Add word to queue
 		mutex.Lock()
-		wordList[word]++
-		heap.Push(&wq, &Word{word, wordList[word]})
-		// heap.Push(&wq, &word)
-
-		// heap.Push(&pq, item)
-		// if wc > min {
-		// 	addToTop10(word)
-		// }
+		heap.Push(&wq, &Word{value: word})
 		mutex.Unlock()
-		// TODO: if case
-		// words = append(words, scanner.Text())
 	}
-
-	fmt.Println("word list:", numWords)
-	// for _, word := range words {
-	// 	fmt.Println(word)
-	// }
+	return nil
 }
+
+/**
+* Word Queue Heap
+ */
+
+// A Word ...
+type Word struct {
+	value string // The word
+	count int    // The total number of occurances
+	index int    // The index of the word in the heap.
+}
+
+// A WordQueue implements heap.Interface and holds Words.
+type WordQueue []*Word
+
+// Len implements sort.Interface returns current length of queue
+func (wq WordQueue) Len() int {
+	return len(wq)
+}
+
+// Less implements sort.Interface compares word.count
+func (wq WordQueue) Less(i, j int) bool {
+	// We want Pop to give us the highest, not lowest, count so we use greater than here.
+	return wq[i].count > wq[j].count
+}
+
+// Swap implements sort.Interface
+func (wq WordQueue) Swap(i, j int) {
+	wq[i], wq[j] = wq[j], wq[i]
+	wq[i].index = i
+	wq[j].index = j
+}
+
+// Push implements heap.Interface adds new words to queue, increments count of existing words
+func (wq *WordQueue) Push(x interface{}) {
+	item := x.(*Word)
+	_, w := wq.Find(item.value)
+
+	// don't add duplicates to queue
+	if w == nil {
+		n := len(*wq)
+		item.index = n
+		item.count = 1
+		*wq = append(*wq, item)
+	} else {
+		w.count++
+		heap.Fix(wq, w.index)
+	}
+}
+
+// Pop implements heap.interface removes word from queue
+func (wq *WordQueue) Pop() interface{} {
+	old := *wq
+	n := len(old)
+	item := old[n-1]
+	old[n-1] = nil  // avoid memory leak
+	item.index = -1 // for safety
+	*wq = old[0 : n-1]
+	return item
+}
+
+// Find returns the index and *Word for a given string
+func (wq *WordQueue) Find(word string) (int, *Word) {
+	for i, v := range *wq {
+		if v.value == word {
+			return i, v
+		}
+	}
+	return 0, nil
+}
+
+/**
+* The following functions were copied from the standard libary (bufio/scan.go)
+* and have been modified to ignore puncuation when scanning for words
+ */
 
 // isSpace reports whether the character is a Unicode white space character.
 // We avoid dependency on the unicode package, but check validity of the implementation
@@ -173,7 +195,7 @@ func isSpace(r rune) bool {
 	if r <= '\u00FF' {
 		// Obvious ASCII ones: \t through \r plus space. Plus two Latin-1 oddballs.
 		switch r {
-		case ' ', '\t', '\n', '\v', '\f', '\r', ',', '.', '-', '_':
+		case ' ', '\t', '\n', '\v', '\f', '\r', ',', '.', '-', '_', '?', '!', ';', ':', '=', '>', '<':
 			return true
 		case '\u0085', '\u00A0':
 			return true
