@@ -60,6 +60,10 @@ func main() {
 
 	// Print out top words
 	for i := 0; i < TOP; i++ {
+		// check that there are even enough words
+		if i > len(wq)-1 {
+			break
+		}
 		word := heap.Pop(&wq).(*Word)
 		fmt.Println(word.value, word.count)
 	}
