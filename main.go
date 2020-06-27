@@ -45,61 +45,14 @@ func walkDir(dir string) error {
 		}
 		if !info.IsDir() && info.Mode().IsRegular() && strings.HasSuffix(path, ".txt") {
 			fmt.Println(path)
+			readFile(path)
 		}
 		return nil
 	})
 }
 
-func glob(dir string) (m []string, e error) {
-
-	e = filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
-		if !info.IsDir() && strings.HasSuffix(path, ".txt") {
-			fmt.Println(path)
-		}
-		// if err != nil {
-		// 	fmt.Printf("prevent panic by handling failure accessing a path %q: %v\n", path, err)
-		// 	return err
-		// }
-		// if info.IsDir() && info.Name() == subDirToSkip {
-		// 	fmt.Printf("skipping a dir without errors: %+v \n", info.Name())
-		// 	return filepath.SkipDir
-		// }
-		// fmt.Printf("visited file or dir: %q\n", path)
-		return nil
-	})
-
-	return
-	fi, err := os.Stat(dir)
-	if err != nil {
-		return
-	}
-	fmt.Printf("%+v\n", fi)
-	if !fi.IsDir() {
-		return
-	}
-	d, err := os.Open(dir)
-	if err != nil {
-		return
-	}
-	defer d.Close()
-
-	// names, _ := d.Readdirnames(-1)
-	// sort.Strings(names)
-
-	// for _, n := range names {
-	// 	matched, err := Match(pattern, n)
-	// 	if err != nil {
-	// 		return m, err
-	// 	}
-	// 	if matched {
-	// 		m = append(m, Join(dir, n))
-	// 	}
-	// }
-	return
-}
-
-func readFile() {
-	file, err := os.Open("test.csv")
+func readFile(filepath string) {
+	file, err := os.Open(filepath)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -107,14 +60,15 @@ func readFile() {
 	scanner := bufio.NewScanner(file)
 	scanner.Split(bufio.ScanWords)
 
-	var words []string
-
+	// var words []string
+	numWords := 0
 	for scanner.Scan() {
-		words = append(words, scanner.Text())
+		numWords++
+		// words = append(words, scanner.Text())
 	}
 
-	fmt.Println("word list:")
-	for _, word := range words {
-		fmt.Println(word)
-	}
+	fmt.Println("word list:", numWords)
+	// for _, word := range words {
+	// 	fmt.Println(word)
+	// }
 }
