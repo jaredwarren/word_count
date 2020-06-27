@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"unicode/utf8"
 )
 
 /**
@@ -41,6 +42,8 @@ func (pq WordQueue) Len() int { return len(pq) }
 func (pq WordQueue) Less(i, j int) bool {
 	// We want Pop to give us the highest, not lowest, priority so we use greater than here.
 	return pq[i].Count > pq[j].Count
+	// si := pq[i]
+	// return wordList[*pq[i]] > wordList[*pq[j]]
 }
 
 // Swap ...
@@ -52,10 +55,8 @@ func (pq WordQueue) Swap(i, j int) {
 
 // Push ...
 func (pq *WordQueue) Push(x interface{}) {
-	// n := len(*pq)
+	// item := x.(*string)
 	item := x.(*Word)
-	// item.index = n
-	item.Count++
 	*pq = append(*pq, item)
 }
 
@@ -86,6 +87,14 @@ func main() {
 	walkDir("./test")
 	wg.Wait()
 
+	for i := 0; i < 10; i++ {
+		// word := heap.Pop(&wq).(*string)
+		// fmt.Println(*word, wordList[*word])
+
+		word := heap.Pop(&wq).(*Word)
+		fmt.Println(word.String, word.Count)
+	}
+
 	fmt.Println(wordList)
 }
 
@@ -115,7 +124,22 @@ func readFile(filepath string) {
 	}
 
 	scanner := bufio.NewScanner(file)
-	scanner.Split(bufio.ScanWords)
+	scanner.Split(ScanWords)
+	// scanner.Split(bufio.ScanWords)
+	// scanner.Split(func(data []byte, atEOF bool) (advance int, token []byte, err error) {
+	// 	if atEOF && len(data) == 0 {
+	// 		return 0, nil, nil
+	// 	}
+	// 	if i := strings.Index(string(data), "\n#"); i >= 0 {
+	// 		return i + 1, data[0:i], nil
+	// 	}
+
+	// 	if atEOF {
+	// 		return len(data), data, nil
+	// 	}
+
+	// 	return
+	// })
 
 	// var words []string
 	numWords := 0
@@ -123,10 +147,9 @@ func readFile(filepath string) {
 		numWords++
 		word := strings.ToLower(scanner.Text())
 		mutex.Lock()
-		// wc := wordList[word] + 1
-		// wordList[word] = wc
-
-		heap.Push(&wq, word)
+		wordList[word]++
+		heap.Push(&wq, &Word{word, wordList[word]})
+		// heap.Push(&wq, &word)
 
 		// heap.Push(&pq, item)
 		// if wc > min {
@@ -143,10 +166,57 @@ func readFile(filepath string) {
 	// }
 }
 
-func addToTop10(word string) {
-
-	for k, v := range top10 {
-
+// isSpace reports whether the character is a Unicode white space character.
+// We avoid dependency on the unicode package, but check validity of the implementation
+// in the tests.
+func isSpace(r rune) bool {
+	if r <= '\u00FF' {
+		// Obvious ASCII ones: \t through \r plus space. Plus two Latin-1 oddballs.
+		switch r {
+		case ' ', '\t', '\n', '\v', '\f', '\r', ',', '.', '-', '_':
+			return true
+		case '\u0085', '\u00A0':
+			return true
+		}
+		return false
 	}
+	// High-valued ones.
+	if '\u2000' <= r && r <= '\u200a' {
+		return true
+	}
+	switch r {
+	case '\u1680', '\u2028', '\u2029', '\u202f', '\u205f', '\u3000':
+		return true
+	}
+	return false
+}
 
+// ScanWords is a split function for a Scanner that returns each
+// space-separated word of text, with surrounding spaces deleted. It will
+// never return an empty string. The definition of space is set by
+// unicode.IsSpace.
+func ScanWords(data []byte, atEOF bool) (advance int, token []byte, err error) {
+	// Skip leading spaces.
+	start := 0
+	for width := 0; start < len(data); start += width {
+		var r rune
+		r, width = utf8.DecodeRune(data[start:])
+		if !isSpace(r) {
+			break
+		}
+	}
+	// Scan until space, marking end of word.
+	for width, i := 0, start; i < len(data); i += width {
+		var r rune
+		r, width = utf8.DecodeRune(data[i:])
+		if isSpace(r) {
+			return i + width, data[start:i], nil
+		}
+	}
+	// If we're at EOF, we have a final, non-empty, non-terminated word. Return it.
+	if atEOF && len(data) > start {
+		return len(data), data[start:], nil
+	}
+	// Request more data.
+	return start, nil, nil
 }
